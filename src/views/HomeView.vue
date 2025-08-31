@@ -51,9 +51,10 @@ const loading = ref(false)
 const analysisResult = ref<AnalysisResult | null>(null)
 const activeTab = ref('painpoints')
 const form = reactive({
-  keywords: [''],
+  keywords: ['副业'],
   monitorEnabled: false,
-  notifyFrequency: 6
+  notifyFrequency: 6,
+  useRealData: false // 新增：是否使用真实数据
 })
 
 const addKeyword = () => {
@@ -78,63 +79,112 @@ const analyzeKeywords = async () => {
   }
 
   loading.value = true
+  
+  // 显示不同的加载信息
+  const loadingMessage = form.useRealData ? '正在爬取小红书真实数据...' : '正在生成演示数据...'
+  ElMessage.info(loadingMessage)
+
   try {
     const response = await axios.post('/api/analyze', {
       keywords: validKeywords,
       monitorEnabled: form.monitorEnabled,
-      notifyFrequency: form.notifyFrequency
+      notifyFrequency: form.notifyFrequency,
+      useRealData: form.useRealData
     })
-    analysisResult.value = response.data
-    ElMessage.success('分析完成！')
-  } catch (error) {
-    console.log('API调用失败，使用模拟数据', error)
     
-    // 使用模拟数据作为演示
-    analysisResult.value = {
-      keyword: validKeywords[0],
-      totalPosts: Math.floor(Math.random() * 200) + 50,
-      painPoints: [
-        { content: '价格太贵了', frequency: 23, sentiment: 85, businessValue: 92 },
-        { content: '效果不如宣传', frequency: 19, sentiment: 78, businessValue: 88 },
-        { content: '包装简陋', frequency: 15, sentiment: 65, businessValue: 72 },
-        { content: '物流太慢', frequency: 12, sentiment: 60, businessValue: 68 },
-        { content: '客服态度差', frequency: 11, sentiment: 82, businessValue: 75 },
-        { content: '质量不好', frequency: 10, sentiment: 88, businessValue: 85 },
-        { content: '使用不方便', frequency: 8, sentiment: 55, businessValue: 60 },
-        { content: '颜色不正', frequency: 7, sentiment: 52, businessValue: 55 },
-        { content: '尺码不准', frequency: 6, sentiment: 48, businessValue: 52 },
-        { content: '容易过敏', frequency: 5, sentiment: 90, businessValue: 78 }
-      ],
-      trends: [
-        { date: '2024-08-25', count: 45 },
-        { date: '2024-08-26', count: 38 },
-        { date: '2024-08-27', count: 52 },
-        { date: '2024-08-28', count: 41 },
-        { date: '2024-08-29', count: 47 },
-        { date: '2024-08-30', count: 55 },
-        { date: '2024-08-31', count: 62 }
-      ],
-      userProfiles: {
-        ageDistribution: {
-          '18-25': 32,
-          '26-35': 45,
-          '36-45': 18,
-          '46+': 5
-        },
-        locationDistribution: {
-          '北京': 22,
-          '上海': 20,
-          '广州': 15,
-          '深圳': 18,
-          '杭州': 8,
-          '其他': 17
-        }
-      }
+    analysisResult.value = response.data
+    
+    // 根据数据源显示不同消息
+    const successMessage = response.data.dataSource === 'real' 
+      ? `✅ 真实数据分析完成！爬取了 ${response.data.totalPosts} 个帖子` 
+      : `✅ 演示数据分析完成！(基于 ${validKeywords[0]} 的增强模拟数据)`
+    
+    ElMessage.success(successMessage)
+    
+    if (response.data.scrapingStats) {
+      console.log('爬取统计:', response.data.scrapingStats)
     }
     
-    ElMessage.success('分析完成！(演示数据)')
+  } catch (error) {
+    console.log('API调用失败，使用增强模拟数据', error)
+    
+    // 降级到增强模拟数据
+    analysisResult.value = generateFallbackData(validKeywords[0])
+    ElMessage.warning('网络异常，已切换到演示数据模式')
+    
   } finally {
     loading.value = false
+  }
+}
+
+// 降级数据生成函数
+function generateFallbackData(keyword: string) {
+  const templates = {
+    '副业': {
+      painPoints: [
+        { content: '收入微薄难以维持', frequency: 28, sentiment: 82, businessValue: 95 },
+        { content: '投入时间过多影响主业', frequency: 24, sentiment: 75, businessValue: 88 },
+        { content: '市场竞争激烈难突围', frequency: 22, sentiment: 78, businessValue: 85 },
+        { content: '启动资金需求高', frequency: 19, sentiment: 70, businessValue: 82 },
+        { content: '缺乏专业技能指导', frequency: 17, sentiment: 68, businessValue: 78 },
+        { content: '客户获取成本过高', frequency: 15, sentiment: 72, businessValue: 75 },
+        { content: '项目风险评估困难', frequency: 13, sentiment: 65, businessValue: 70 },
+        { content: '时间管理难以平衡', frequency: 11, sentiment: 62, businessValue: 68 }
+      ]
+    },
+    '需求挖掘': {
+      painPoints: [
+        { content: '用户真实需求难以识别', frequency: 26, sentiment: 85, businessValue: 92 },
+        { content: '市场调研成本过高', frequency: 23, sentiment: 78, businessValue: 89 },
+        { content: '数据分析工具门槛高', frequency: 21, sentiment: 75, businessValue: 86 },
+        { content: '用户访谈质量不稳定', frequency: 18, sentiment: 72, businessValue: 80 },
+        { content: '需求变化速度过快', frequency: 16, sentiment: 70, businessValue: 77 },
+        { content: '跨部门协作效率低', frequency: 14, sentiment: 68, businessValue: 73 },
+        { content: '竞品分析信息获取难', frequency: 12, sentiment: 65, businessValue: 70 },
+        { content: '需求优先级判断困难', frequency: 10, sentiment: 62, businessValue: 65 }
+      ]
+    },
+    '海外产品': {
+      painPoints: [
+        { content: '物流成本侵蚀利润', frequency: 32, sentiment: 88, businessValue: 94 },
+        { content: '质量标准差异大', frequency: 27, sentiment: 82, businessValue: 90 },
+        { content: '海关清关程序复杂', frequency: 25, sentiment: 80, businessValue: 87 },
+        { content: '汇率波动风险高', frequency: 22, sentiment: 76, businessValue: 83 },
+        { content: '语言沟通障碍严重', frequency: 20, sentiment: 74, businessValue: 79 },
+        { content: '退货处理成本高', frequency: 18, sentiment: 72, businessValue: 76 },
+        { content: '合规认证周期长', frequency: 15, sentiment: 69, businessValue: 72 },
+        { content: '文化差异适配困难', frequency: 13, sentiment: 66, businessValue: 68 }
+      ]
+    }
+  }
+
+  const selectedTemplate = templates[keyword as keyof typeof templates] || templates['副业']
+  
+  return {
+    keyword,
+    totalPosts: Math.floor(Math.random() * 50) + 100,
+    painPoints: selectedTemplate.painPoints,
+    trends: Array.from({ length: 7 }, (_, i) => ({
+      date: new Date(Date.now() - (6 - i) * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+      count: Math.floor(Math.random() * 30) + 40
+    })),
+    userProfiles: {
+      ageDistribution: {
+        '18-25': Math.floor(Math.random() * 20) + 25,
+        '26-35': Math.floor(Math.random() * 25) + 40,
+        '36-45': Math.floor(Math.random() * 15) + 20,
+        '46+': Math.floor(Math.random() * 10) + 10
+      },
+      locationDistribution: {
+        '北京': Math.floor(Math.random() * 10) + 18,
+        '上海': Math.floor(Math.random() * 10) + 16,
+        '广州': Math.floor(Math.random() * 8) + 12,
+        '深圳': Math.floor(Math.random() * 8) + 14,
+        '杭州': Math.floor(Math.random() * 6) + 8,
+        '其他': Math.floor(Math.random() * 15) + 25
+      }
+    },
+    dataSource: 'mock'
   }
 }
 
@@ -261,11 +311,20 @@ const userProfileChartOption = computed(() => {
         <el-form :model="form" label-width="120px">
           <el-form-item label="关键词">
             <div v-for="(keyword, index) in form.keywords" :key="index" class="keyword-input">
-              <el-input
+              <el-select
                 v-model="form.keywords[index]"
-                placeholder="请输入关键词"
+                filterable
+                allow-create
+                placeholder="请选择或输入关键词"
                 style="width: 300px; margin-right: 10px"
-              />
+              >
+                <el-option label="副业" value="副业" />
+                <el-option label="需求挖掘" value="需求挖掘" />
+                <el-option label="海外产品" value="海外产品" />
+                <el-option label="跨境电商" value="跨境电商" />
+                <el-option label="内容创作" value="内容创作" />
+                <el-option label="社群运营" value="社群运营" />
+              </el-select>
               <el-button 
                 v-if="form.keywords.length > 1" 
                 @click="removeKeyword(index)"
@@ -284,6 +343,19 @@ const userProfileChartOption = computed(() => {
             >
               添加关键词
             </el-button>
+          </el-form-item>
+
+          <el-form-item label="数据模式">
+            <el-radio-group v-model="form.useRealData">
+              <el-radio :value="false">
+                <span>演示模式</span>
+                <el-text type="info" size="small" style="margin-left: 8px;">快速体验，基于真实场景的模拟数据</el-text>
+              </el-radio>
+              <el-radio :value="true">
+                <span>真实数据</span>
+                <el-text type="warning" size="small" style="margin-left: 8px;">爬取小红书真实数据，需要3-5分钟</el-text>
+              </el-radio>
+            </el-radio-group>
           </el-form-item>
 
           <el-form-item label="定时监控">
@@ -307,8 +379,12 @@ const userProfileChartOption = computed(() => {
               :loading="loading"
               size="large"
             >
-              {{ loading ? '分析中...' : '开始分析' }}
+              {{ loading ? (form.useRealData ? '爬取分析中...' : '生成中...') : '开始分析' }}
             </el-button>
+            
+            <el-text v-if="form.useRealData" type="warning" size="small" style="margin-left: 15px;">
+              💡 真实数据模式将打开浏览器进行数据爬取，请保持网络畅通
+            </el-text>
           </el-form-item>
         </el-form>
       </div>
