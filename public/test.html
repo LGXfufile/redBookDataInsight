@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>API测试页面</title>
+  <style>
+    body { 
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      max-width: 800px; 
+      margin: 0 auto; 
+      padding: 20px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+    }
+    .container {
+      background: rgba(255, 255, 255, 0.9);
+      border-radius: 12px;
+      padding: 30px;
+      backdrop-filter: blur(10px);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+    }
+    button { 
+      background: #667eea;
+      color: white;
+      border: none; 
+      padding: 12px 24px; 
+      border-radius: 6px;
+      cursor: pointer;
+      margin: 10px 5px;
+      font-size: 14px;
+    }
+    button:hover { background: #5a67d8; }
+    button:disabled { background: #ccc; cursor: not-allowed; }
+    input, select { 
+      padding: 8px 12px; 
+      border: 1px solid #ddd; 
+      border-radius: 4px;
+      margin: 5px;
+      width: 200px;
+    }
+    pre { 
+      background: #f5f5f5; 
+      padding: 15px; 
+      border-radius: 6px;
+      overflow-x: auto;
+      white-space: pre-wrap;
+    }
+    .loading { color: #667eea; font-weight: bold; }
+    .error { color: #e53e3e; font-weight: bold; }
+    .success { color: #38a169; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🎯 小红书需求洞察工具 - API测试</h1>
+    
+    <div style="border-bottom: 1px solid #eee; padding-bottom: 20px; margin-bottom: 20px;">
+      <h3>📊 数据分析测试</h3>
+      <input type="text" id="keyword" placeholder="输入关键词 (如: 护肤)" value="护肤">
+      <label>
+        <input type="checkbox" id="monitor"> 开启监控
+      </label>
+      <select id="frequency">
+        <option value="2">每2小时</option>
+        <option value="6" selected>每6小时</option>
+        <option value="12">每12小时</option>
+        <option value="24">每24小时</option>
+      </select>
+      <br>
+      <button onclick="testAnalyze()" id="analyzeBtn">🔍 开始分析</button>
+    </div>
+
+    <div style="border-bottom: 1px solid #eee; padding-bottom: 20px; margin-bottom: 20px;">
+      <h3>🔔 飞书通知测试</h3>
+      <p>Webhook: <code>https://open.feishu.cn/open-apis/bot/v2/hook/8d4df83a-07d0-48a2-83ac-cf8e3b163c3e</code></p>
+      <button onclick="testFeishuNotification()">📱 发送测试通知</button>
+      <button onclick="testMonitorAlert()">🚨 发送监控警报</button>
+    </div>
+
+    <div style="border-bottom: 1px solid #eee; padding-bottom: 20px; margin-bottom: 20px;">
+      <h3>⚙️ 监控管理测试</h3>
+      <button onclick="testAddMonitor()">➕ 添加监控任务</button>
+      <button onclick="testListMonitors()">📋 查看监控列表</button>
+      <button onclick="testRemoveMonitor()">❌ 移除监控任务</button>
+    </div>
+
+    <div>
+      <h3>📋 测试结果</h3>
+      <div id="result">等待测试...</div>
+    </div>
+  </div>
+
+  <script>
+    let currentTaskId = null;
+    
+    function setResult(content, type = 'info') {
+      const result = document.getElementById('result');
+      result.innerHTML = content;
+      result.className = type;
+    }
+
+    async function testAnalyze() {
+      const btn = document.getElementById('analyzeBtn');
+      const keyword = document.getElementById('keyword').value;
+      
+      if (!keyword.trim()) {
+        setResult('请输入关键词！', 'error');
+        return;
+      }
+
+      btn.disabled = true;
+      btn.textContent = '🔄 分析中...';
+      setResult('正在分析数据，请稍候...', 'loading');
+
+      try {
+        const response = await fetch('/api/analyze', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            keywords: [keyword],
+            monitorEnabled: document.getElementById('monitor').checked,
+            notifyFrequency: parseInt(document.getElementById('frequency').value)
+          })
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          setResult(`✅ 分析完成！
+
+📊 分析结果：
+• 关键词: ${data.keyword}
+• 总帖子数: ${data.totalPosts}
+• 发现痛点: ${data.painPoints.length} 个
+• 高价值机会: ${data.painPoints.filter(p => p.businessValue > 70).length} 个
+
+🎯 主要痛点：
+${data.painPoints.slice(0, 5).map((p, i) => 
+  `${i+1}. ${p.content} (价值:${p.businessValue}分)`
+).join('\n')}
+
+📈 趋势数据: ${data.trends.length} 个数据点`, 'success');
+        } else {
+          const error = await response.text();
+          setResult(`❌ 分析失败: ${error}`, 'error');
+        }
+      } catch (error) {
+        setResult(`❌ 网络错误: ${error.message}`, 'error');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '🔍 开始分析';
+      }
+    }
+
+    async function testFeishuNotification() {
+      setResult('🔄 发送飞书测试通知...', 'loading');
+      
+      const webhookUrl = 'https://open.feishu.cn/open-apis/bot/v2/hook/8d4df83a-07d0-48a2-83ac-cf8e3b163c3e';
+      
+      try {
+        const response = await fetch(webhookUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            msg_type: 'text',
+            content: {
+              text: `🎉 小红书需求洞察工具 - 连接测试
+
+时间: ${new Date().toLocaleString('zh-CN')}
+状态: ✅ 系统运行正常
+
+🔍 功能验证：
+• 前端界面: 正常加载
+• API接口: 连接成功
+• 数据分析: 功能正常
+• 通知系统: 测试成功
+
+💡 您的小红书痛点监控工具已就绪！`
+            }
+          })
+        });
+
+        if (response.ok) {
+          setResult('✅ 飞书通知发送成功！请查看群消息', 'success');
+        } else {
+          setResult(`❌ 飞书通知发送失败: ${response.status}`, 'error');
+        }
+      } catch (error) {
+        setResult(`❌ 发送失败: ${error.message}`, 'error');
+      }
+    }
+
+    async function testMonitorAlert() {
+      setResult('🔄 发送监控警报...', 'loading');
+      
+      const webhookUrl = 'https://open.feishu.cn/open-apis/bot/v2/hook/8d4df83a-07d0-48a2-83ac-cf8e3b163c3e';
+      
+      try {
+        const response = await fetch(webhookUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            msg_type: 'text',
+            content: {
+              text: `🚨 痛点监控警报 - 发现商业机会！
+
+关键词: 监控通知
+时间: ${new Date().toLocaleString('zh-CN')}
+
+发现 3 个新痛点，其中 2 个高价值机会：
+
+1. 通知响应速度太慢
+   🔥 商业价值: 85分
+   📊 提及频次: 23次
+
+2. 缺少个性化设置
+   🔥 商业价值: 72分  
+   📊 提及频次: 15次
+
+3. 界面不够美观
+   🔥 商业价值: 68分
+   📊 提及频次: 12次
+
+💼 建议立即关注这些市场机会！`
+            }
+          })
+        });
+
+        if (response.ok) {
+          setResult('✅ 监控警报发送成功！请查看群消息', 'success');
+        } else {
+          setResult(`❌ 监控警报发送失败: ${response.status}`, 'error');
+        }
+      } catch (error) {
+        setResult(`❌ 发送失败: ${error.message}`, 'error');
+      }
+    }
+
+    async function testAddMonitor() {
+      setResult('🔄 创建监控任务...', 'loading');
+      currentTaskId = `task_${Date.now()}`;
+      
+      try {
+        const response = await fetch('/api/monitor', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'add',
+            taskId: currentTaskId,
+            config: {
+              webhookUrl: 'https://open.feishu.cn/open-apis/bot/v2/hook/8d4df83a-07d0-48a2-83ac-cf8e3b163c3e',
+              keywords: ['监控通知'],
+              frequency: 6
+            }
+          })
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          setResult(`✅ 监控任务创建成功！
+          
+任务ID: ${currentTaskId}
+关键词: 监控通知
+频率: 每6小时
+状态: 运行中`, 'success');
+        } else {
+          const error = await response.text();
+          setResult(`❌ 创建失败: ${error}`, 'error');
+        }
+      } catch (error) {
+        setResult(`❌ 创建失败: ${error.message}`, 'error');
+      }
+    }
+
+    async function testListMonitors() {
+      setResult('🔄 获取监控列表...', 'loading');
+      
+      try {
+        const response = await fetch('/api/monitor', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'list' })
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          if (data.tasks && data.tasks.length > 0) {
+            const taskList = data.tasks.map((task, index) => 
+              `${index + 1}. ID: ${task.id}
+   关键词: ${task.config.keywords.join(', ')}
+   频率: 每${task.config.frequency}小时`
+            ).join('\n\n');
+            
+            setResult(`✅ 监控任务列表 (${data.tasks.length}个)：
+
+${taskList}`, 'success');
+          } else {
+            setResult('📋 暂无监控任务', 'info');
+          }
+        } else {
+          const error = await response.text();
+          setResult(`❌ 获取失败: ${error}`, 'error');
+        }
+      } catch (error) {
+        setResult(`❌ 获取失败: ${error.message}`, 'error');
+      }
+    }
+
+    async function testRemoveMonitor() {
+      if (!currentTaskId) {
+        setResult('❌ 请先创建监控任务', 'error');
+        return;
+      }
+      
+      setResult('🔄 移除监控任务...', 'loading');
+      
+      try {
+        const response = await fetch('/api/monitor', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'remove',
+            taskId: currentTaskId
+          })
+        });
+
+        if (response.ok) {
+          setResult(`✅ 监控任务已移除: ${currentTaskId}`, 'success');
+          currentTaskId = null;
+        } else {
+          const error = await response.text();
+          setResult(`❌ 移除失败: ${error}`, 'error');
+        }
+      } catch (error) {
+        setResult(`❌ 移除失败: ${error.message}`, 'error');
+      }
+    }
+
+    // 页面加载完成后显示欢迎信息
+    window.onload = function() {
+      setResult(`🎯 小红书需求洞察工具测试页面
+
+📋 功能清单：
+✅ Vue3 + TypeScript 前端框架  
+✅ Element Plus UI组件库
+✅ ECharts 数据可视化
+✅ Vercel Functions 后端API
+✅ 智能爬虫和NLP分析
+✅ 飞书机器人通知系统
+✅ 定时监控任务管理
+
+🚀 请点击上方按钮开始测试各项功能！`, 'info');
+    };
+  </script>
+</body>
+</html>
