@@ -108,9 +108,30 @@ const analyzeKeywords = async () => {
   } catch (error) {
     console.log('API调用失败，使用增强模拟数据', error)
     
+    // 关闭之前的loading消息
+    ElMessage.closeAll()
+    
+    // 显示更明显的降级提示
+    ElMessage({
+      message: '🔄 API连接失败，正在使用本地演示数据...',
+      type: 'warning',
+      duration: 2000
+    })
+    
+    // 稍微延迟一下，让用户看到提示
+    await new Promise(resolve => setTimeout(resolve, 500))
+    
     // 降级到增强模拟数据
     analysisResult.value = generateFallbackData(validKeywords[0])
-    ElMessage.warning('网络异常，已切换到演示数据模式')
+    
+    // 显示成功消息
+    ElMessage({
+      message: `✅ 演示数据分析完成！(基于 ${validKeywords[0]} 的增强模拟数据)`,
+      type: 'success',
+      duration: 3000
+    })
+    
+    console.log('演示数据已生成:', analysisResult.value)
     
   } finally {
     loading.value = false
